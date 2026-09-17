@@ -57,7 +57,20 @@ class MaiaEngine:
         await self._read_until("uciok", self.settings.startup_timeout_seconds)
         await self._send("isready")
         await self._read_until("readyok", self.settings.startup_timeout_seconds)
-        logger.info("Maia ready in %d ms", round((time.perf_counter() - started) * 1000))
+        logger.info("Maia model loaded; running startup inference warmup")
+        await self._send("setoption name Temperature value 0")
+        await self._send("setoption name MultiPV value 1")
+        await self._send("position startpos")
+        await self._send("go nodes 1")
+        warmup_lines = await self._read_until("bestmove", self.settings.startup_timeout_seconds)
+        warmup_move = next(line for line in reversed(warmup_lines) if line.startswith("bestmove")).split()[1]
+        if warmup_move == "0000":
+            raise EngineFailure("Maia startup warmup did not return a move")
+        await self._send("ucinewgame")
+        logger.info(
+            "Maia loaded and warmed in %d ms; warmup_move=%s",
+            round((time.perf_counter() - started) * 1000), warmup_move,
+        )
 
     async def _drain_stderr(self) -> None:
         if not self.process or not self.process.stderr:
