@@ -36,14 +36,21 @@ class MaiaEngine:
     def started(self) -> bool:
         return self.process is not None and self.process.returncode is None
 
+    def _command(self) -> list[str]:
+        return [
+            "python", "-m", "app.fast_uci",
+            "--model", self.settings.model,
+            "--use-uci-history",
+            "--device", self.settings.device,
+            "--local-files-only",
+            "--threads", str(self.settings.torch_threads),
+            "--use-amp" if self.settings.use_amp else "--no-use-amp",
+        ]
+
     async def start(self) -> None:
         if self.started:
             return
-        args = [
-            "maia3-uci", "--model", self.settings.model,
-            "--use-uci-history", "--device", self.settings.device,
-        ]
-        args.append("--use-amp" if self.settings.use_amp else "--no-use-amp")
+        args = self._command()
         logger.info("Starting Maia model=%s device=%s", self.settings.model, self.settings.device)
         started = time.perf_counter()
         self.process = await asyncio.create_subprocess_exec(
@@ -127,6 +134,7 @@ class MaiaEngine:
             raise EngineFailure(f"Maia timed out waiting for {marker}") from exc
 
     async def generate(self, request: MoveRequest) -> MoveResponse:
+        request_started = time.perf_counter()
         board = request.board()
         if board.is_game_over():
             raise ValueError("the supplied position is already game over")
@@ -134,9 +142,10 @@ class MaiaEngine:
             raise ValueError("deadline exceeds server maximum")
 
         async with self.lock:
+            lock_acquired = time.perf_counter()
             if not self.started:
                 await self.start()
-            started = time.perf_counter()
+            setup_started = time.perf_counter()
             logger.info(
                 "Generating move bot_elo=%d player_elo=%d multipv=%d deadline_ms=%d",
                 request.bot_elo, request.player_elo, request.multi_pv, request.deadline_ms,
@@ -152,6 +161,7 @@ class MaiaEngine:
                     await self._send("position startpos moves " + " ".join(request.moves))
                 else:
                     await self._send("position fen " + request.fen)
+                inference_started = time.perf_counter()
                 await self._send("go nodes 1")
                 lines = await self._read_until("bestmove", request.deadline_ms / 1000)
             except EngineFailure:
@@ -178,13 +188,21 @@ class MaiaEngine:
                         wdl=(int(match.group("w")), int(match.group("d")), int(match.group("l"))),
                     ))
             candidates.sort(key=lambda item: item.rank)
-            elapsed_ms = round((time.perf_counter() - started) * 1000)
-            logger.info("Maia returned %s in %d ms", move, elapsed_ms)
+            completed = time.perf_counter()
+            inference_ms = round((completed - inference_started) * 1000)
+            logger.info(
+                "Maia timing move=%s queue_ms=%d setup_ms=%d inference_ms=%d total_ms=%d",
+                move,
+                round((lock_acquired - request_started) * 1000),
+                round((inference_started - setup_started) * 1000),
+                inference_ms,
+                round((completed - request_started) * 1000),
+            )
             return MoveResponse(
                 move=move,
                 model=self.settings.model,
                 bot_elo=request.bot_elo,
                 player_elo=request.player_elo,
                 candidates=candidates,
-                inference_ms=elapsed_ms,
+                inference_ms=inference_ms,
             )
