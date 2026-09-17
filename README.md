@@ -27,7 +27,7 @@ curl -X POST "https://YOUR-DOMAIN/v1/move" \
     "player_elo":1500,
     "temperature":0.8,
     "top_p":0.95,
-    "multi_pv":5,
+    "multi_pv":1,
     "deadline_ms":60000
   }'
 ```
@@ -67,12 +67,12 @@ pytest -q
 - Maia 3 normal practice moves
 - Adjustable bot and player Elo
 - Temperature and Top P sampling
-- Candidate UCI lines for a future Stockfish filter
+- One Maia candidate line for fast practice play on CPU
 - Bearer-token authentication
 - FEN and move-history validation
 - One persistent serialized Maia worker per service instance
 
-Stockfish-assisted elite mode and the Supabase Edge Function are the next stage after this service is deployed and tested.
+Stockfish-assisted elite mode will require separate benchmarking and likely stronger compute before increasing MultiPV above 1.
 
 ## License
 
