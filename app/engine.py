@@ -1,5 +1,6 @@
 import asyncio
 from dataclasses import dataclass
+import logging
 import re
 import time
 
@@ -13,6 +14,7 @@ INFO_RE = re.compile(
     r"multipv (?P<rank>\d+).*?score cp (?P<cp>-?\d+).*?wdl "
     r"(?P<w>\d+) (?P<d>\d+) (?P<l>\d+).*?pv (?P<move>[a-h][1-8][a-h][1-8][qrbn]?)"
 )
+logger = logging.getLogger("gambet.maia")
 
 
 @dataclass
@@ -28,6 +30,7 @@ class MaiaEngine:
         self.settings = settings
         self.process: asyncio.subprocess.Process | None = None
         self.lock = asyncio.Lock()
+        self.stderr_task: asyncio.Task | None = None
 
     @property
     def started(self) -> bool:
@@ -41,16 +44,29 @@ class MaiaEngine:
             "--use-uci-history", "--device", self.settings.device,
         ]
         args.append("--use-amp" if self.settings.use_amp else "--no-use-amp")
+        logger.info("Starting Maia model=%s device=%s", self.settings.model, self.settings.device)
+        started = time.perf_counter()
         self.process = await asyncio.create_subprocess_exec(
             *args,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
+        self.stderr_task = asyncio.create_task(self._drain_stderr())
         await self._send("uci")
         await self._read_until("uciok", self.settings.startup_timeout_seconds)
         await self._send("isready")
         await self._read_until("readyok", self.settings.startup_timeout_seconds)
+        logger.info("Maia ready in %d ms", round((time.perf_counter() - started) * 1000))
+
+    async def _drain_stderr(self) -> None:
+        if not self.process or not self.process.stderr:
+            return
+        while True:
+            raw = await self.process.stderr.readline()
+            if not raw:
+                return
+            logger.warning("Maia stderr: %s", raw.decode(errors="replace").rstrip())
 
     async def close(self) -> None:
         if not self.process:
@@ -63,6 +79,9 @@ class MaiaEngine:
                 self.process.kill()
                 await self.process.wait()
         self.process = None
+        if self.stderr_task:
+            self.stderr_task.cancel()
+            self.stderr_task = None
 
     async def restart(self) -> None:
         await self.close()
@@ -83,10 +102,7 @@ class MaiaEngine:
             while True:
                 raw = await self.process.stdout.readline()
                 if not raw:
-                    stderr = ""
-                    if self.process and self.process.stderr:
-                        stderr = (await self.process.stderr.read()).decode(errors="replace")[-1000:]
-                    raise EngineFailure(f"Maia exited unexpectedly. {stderr}".strip())
+                    raise EngineFailure("Maia exited unexpectedly; inspect Railway logs for stderr")
                 line = raw.decode(errors="replace").strip()
                 lines.append(line)
                 if line.startswith(marker):
@@ -108,6 +124,10 @@ class MaiaEngine:
             if not self.started:
                 await self.start()
             started = time.perf_counter()
+            logger.info(
+                "Generating move bot_elo=%d player_elo=%d multipv=%d deadline_ms=%d",
+                request.bot_elo, request.player_elo, request.multi_pv, request.deadline_ms,
+            )
             try:
                 await self._send("ucinewgame")
                 await self._send(f"setoption name SelfElo value {request.bot_elo}")
@@ -146,6 +166,7 @@ class MaiaEngine:
                     ))
             candidates.sort(key=lambda item: item.rank)
             elapsed_ms = round((time.perf_counter() - started) * 1000)
+            logger.info("Maia returned %s in %d ms", move, elapsed_ms)
             return MoveResponse(
                 move=move,
                 model=self.settings.model,
