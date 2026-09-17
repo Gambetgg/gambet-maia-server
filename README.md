@@ -13,6 +13,8 @@ Private HTTP service that runs Maia 3 for Gambet practice games. It starts a per
 
 The initial build downloads the Maia 3 5M checkpoint, so it can take several minutes. The model remains loaded between requests.
 
+The first move on shared CPU can be substantially slower than later moves. Use a 60-second deadline for initial Railway testing, then lower it after observing real inference times in the deployment logs.
+
 ## Request a move
 
 ```bash
@@ -26,7 +28,7 @@ curl -X POST "https://YOUR-DOMAIN/v1/move" \
     "temperature":0.8,
     "top_p":0.95,
     "multi_pv":5,
-    "deadline_ms":5000
+    "deadline_ms":60000
   }'
 ```
 
