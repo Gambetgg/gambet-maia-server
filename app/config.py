@@ -16,6 +16,7 @@ class Settings:
     preload_model: bool = _bool("PRELOAD_MODEL", True)
     startup_timeout_seconds: float = float(os.getenv("STARTUP_TIMEOUT_SECONDS", "240"))
     max_deadline_ms: int = int(os.getenv("MAX_DEADLINE_MS", "60000"))
+    torch_threads: int = int(os.getenv("MAIA_TORCH_THREADS", "2"))
 
 
 settings = Settings()
