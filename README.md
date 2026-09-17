@@ -15,6 +15,12 @@ The initial build downloads the Maia 3 5M checkpoint, so it can take several min
 
 During deployment, the service loads Maia and completes a full startup inference before Railway marks it healthy. Player requests therefore use an already warmed model. Keep the Railway service continuously running; do not enable sleeping or serverless scale-to-zero for production practice games.
 
+The Gambet worker uses one Maia3 model pass per move. Upstream Maia3 normally
+runs a second pass to calculate candidate-specific WDL analysis; that analysis
+does not change the selected move and is intentionally skipped for live games.
+`MAIA_TORCH_THREADS` defaults to `2` and can be tuned to the Railway service's
+allocated CPU count.
+
 ## Request a move
 
 ```bash
