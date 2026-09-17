@@ -13,7 +13,7 @@ Private HTTP service that runs Maia 3 for Gambet practice games. It starts a per
 
 The initial build downloads the Maia 3 5M checkpoint, so it can take several minutes. The model remains loaded between requests.
 
-The first move on shared CPU can be substantially slower than later moves. Use a 60-second deadline for initial Railway testing, then lower it after observing real inference times in the deployment logs.
+During deployment, the service loads Maia and completes a full startup inference before Railway marks it healthy. Player requests therefore use an already warmed model. Keep the Railway service continuously running; do not enable sleeping or serverless scale-to-zero for production practice games.
 
 ## Request a move
 
