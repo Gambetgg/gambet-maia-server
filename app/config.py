@@ -15,7 +15,7 @@ class Settings:
     use_amp: bool = _bool("MAIA_USE_AMP", False)
     preload_model: bool = _bool("PRELOAD_MODEL", True)
     startup_timeout_seconds: float = float(os.getenv("STARTUP_TIMEOUT_SECONDS", "240"))
-    max_deadline_ms: int = int(os.getenv("MAX_DEADLINE_MS", "15000"))
+    max_deadline_ms: int = int(os.getenv("MAX_DEADLINE_MS", "60000"))
 
 
 settings = Settings()
