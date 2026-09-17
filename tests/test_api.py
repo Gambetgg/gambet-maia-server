@@ -5,6 +5,7 @@ os.environ.setdefault("PRELOAD_MODEL", "false")
 from fastapi.testclient import TestClient
 from app.main import app, engine
 from app.engine import INFO_RE
+from app.config import Settings
 from app.schemas import MoveResponse
 
 
@@ -52,3 +53,12 @@ def test_parses_maia_candidate_line():
     assert match is not None
     assert match.group("rank") == "2"
     assert match.group("move") == "g1f3"
+
+
+def test_engine_uses_fast_persistent_worker():
+    from app.engine import MaiaEngine
+
+    command = MaiaEngine(Settings(torch_threads=3))._command()
+    assert command[:3] == ["python", "-m", "app.fast_uci"]
+    assert "--local-files-only" in command
+    assert command[command.index("--threads") + 1] == "3"
