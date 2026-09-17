@@ -10,7 +10,7 @@ class MoveRequest(BaseModel):
     temperature: float = Field(default=0.8, ge=0.0, le=2.0)
     top_p: float = Field(default=0.95, gt=0.0, le=1.0)
     multi_pv: int = Field(default=5, ge=1, le=10)
-    deadline_ms: int = Field(default=5000, ge=250, le=15000)
+    deadline_ms: int = Field(default=30000, ge=250, le=60000)
 
     @field_validator("fen")
     @classmethod
